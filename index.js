@@ -1,0 +1,201 @@
+const express = require('express');
+const crypto = require('crypto');
+const bodyParser = require('body-parser');
+
+
+const app = express();
+const PORT = 3000;
+const str_data = {};
+
+app.use(bodyParser.json());
+
+// Create/Analyze String
+app.post('/strings', (req, res) => {
+
+  const str = req.body.value; 
+  if(str === undefined){
+    return res.status(400).json({ error: 'Invalid request body or missing "value" field' });
+  }
+  if (typeof str !== 'string') {
+    return res.status(422).json({ error: 'Invalid data type for "value" (must be a string)' });
+  }
+  if (str_data.includes(str)) {
+    return res.status(409).json({ error: 'String already exists in the system' });
+  }
+  
+  
+  const sha256_hash = crypto.createHash('sha256').update(string).digest('hex');
+  function isPalindrome(str) {
+    const cleanedStr = str.replace(/[\W_]/g, '').toLowerCase();
+    const reversedStr = cleanedStr.split('').reverse().join('');
+    return cleanedStr === reversedStr;
+  }
+  function uniqueChars(str) {
+    const chars = new Set(str);
+    return chars.size;
+  }
+  function characterFrequencyMap(str) {
+    const freqMap = {};
+    for (const char of str) {
+      freqMap[char] = (freqMap[char] || 0) + 1;
+    }
+    return freqMap;
+  } 
+  const wordCount = str.trim() === '' ? 0 : str.trim().split(/\s+/).length;
+
+  const response = {
+    'id': sha256_hash,
+    'value': str,
+    'properties': {
+      'length': str.length,
+      'is_palindrome': isPalindrome(str),
+      'unique_characters': uniqueChars(str),
+      'word_count': wordCount,
+      'sha256_hash': sha256_hash,
+      'character_frequency_map': characterFrequencyMap(str),
+    },
+    'created_at': new Date().toISOString(),
+  }
+  str_data[str] = response;
+  res.status(201).json(response);
+});
+
+// Get Specific String
+app.get('/strings/:value', (req, res) => {
+  const str = req.params.value;
+  if (typeof str !== 'string') {
+    return res.status(422).json({ error: 'Invalid data type for "value" (must be a string)' });
+  }
+  if (!str_data[str]) {
+    return res.status(404).json({ error: 'String does not exist in the system' });
+  }
+  const response = {
+    'id': str_data[str].id,
+    'value': str,
+    'properties': str_data[str],
+    'created_at': str_data[str].created_at,
+  }
+  res.status(200).json(response);
+  });
+
+// Get All Strings with Filtering
+app.get('/strings', (req, res) => {
+  if (Object.keys(str_data).length === 0) {
+    return res.status(404).json({ error: 'No strings available in the system' });
+  }
+  if (Object.keys(req.query).length === 0) {
+    return res.status(200).json({
+      'data': Object.values(str_data),
+      'count': Object.keys(str_data).length,
+    });
+  }
+  if (!['is_palindrome', 'min_length', 'max_length', 'word_count', 'contains_characters'].some(param => param in req.query)) {
+    return res.status(400).json({ error: 'Invalid query parameter values or types' });
+  }
+  let results = Object.values(str_data);
+
+  // Filtering based on query parameters
+  const { is_palindrome,  min_length, max_length, word_count, contains_characters } = req.query;
+  if (is_palindrome !== undefined) {
+    const isPalindrome = is_palindrome.toLowerCase() === 'true';
+    results = results.filter(item => item.properties.is_palindrome === isPalindrome);
+  }
+  if (min_length !== undefined) {
+    const minLen = parseInt(min_length, 10);
+    results = results.filter(item => item.properties.length >= minLen);
+  }
+  if (max_length !== undefined) {
+    const maxLen = parseInt(max_length, 10);
+    results = results.filter(item => item.properties.length <= maxLen);
+  }
+  if (word_count !== undefined) {
+    const wCount = parseInt(word_count, 10);
+    results = results.filter(item => item.properties.word_count === wCount);
+  }
+  if (contains_characters !== undefined) {
+    const chars = contains_characters.split('');
+    results = results.filter(item => 
+      chars.every(char => item.value.includes(char))
+    );
+  }
+
+  res.status(200).json({
+    'data': [...results],
+    'count': results.length,
+    'filters_applied': req.query,
+  });
+});
+
+// Natural Language Filering
+app.get('/strings/filter-by-natural-language', (req, res) => {
+  const { query } = req.query;
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Unable to parse natural language query' });
+  }
+  if (Object.keys(str_data).length === 0) {
+    return res.status(404).json({ error: 'No strings available in the system' });
+  }
+  if (!['palindrome', 'not palindrome', 'at least', 'minimum', 'at most', 'maximum', 'word count of', 'contains'].some(term => query.toLowerCase().includes(term))) {
+    return res.status(400).json({ error: 'Unable to parse natural language query' });
+  }
+  if (Object.keys(req.query).length > 1) {
+    return res.status(400).json({ error: 'Query parsed but resulted in conflicting filters' });
+  }
+  
+  
+  let results = Object.values(str_data);
+  const lowerQuery = query.toLowerCase();
+
+  if (lowerQuery.includes('palindrome')) {
+    const isPalindrome = lowerQuery.includes('not') ? false : true;
+    results = results.filter(item => item.properties.is_palindrome === isPalindrome);
+  }
+  const lengthMatch = lowerQuery.match(/(at least|minimum of|minimum)\s+(\d+)| (at most|maximum of|maximum)\s+(\d+)/g);
+  if (lengthMatch) {
+    lengthMatch.forEach(match => {
+      const parts = match.trim().split(/\s+/);
+      const value = parseInt(parts[parts.length - 1], 10);
+      if (parts[0] === 'at' && parts[1] === 'least' || parts[0] === 'minimum' || parts[0] === 'minimum of') {
+        results = results.filter(item => item.properties.length >= value);
+      } else if (parts[0] === 'at' && parts[1] === 'most' || parts[0] === 'maximum' || parts[0] === 'maximum of') {
+        results = results.filter(item => item.properties.length <= value);
+      }
+    });
+  }
+  const wordCountMatch = lowerQuery.match(/word count of (\d+)/);
+  if (wordCountMatch) {
+    const wCount = parseInt(wordCountMatch[1], 10);
+    results = results.filter(item => item.properties.word_count === wCount);
+  }
+  const containsMatch = lowerQuery.match(/contains ['"](.+?)['"]/);
+  if (containsMatch) {
+    const chars = containsMatch[1].split('');
+    results = results.filter(item => 
+      chars.every(char => item.value.includes(char))
+    );
+  }
+
+  res.status(200).json({
+    'data': [...results],
+    'count': results.length,
+    'natural_language_query': query,
+  });
+});
+
+// Delete String
+app.delete('/strings/:value', (req, res) => {
+  const str = req.params.value;
+  if (typeof str !== 'string') {
+    return res.status(422).json({ error: 'Invalid data type for "value" (must be a string)' });
+  }
+  if (!str_data[str]) {
+    return res.status(404).json({ error: 'String does not exist in the system' });
+  }
+  delete str_data[str];
+  res.status(204).send();
+});
+
+
+app.listen(PORT, () => {
+  console.log(`App listening on port ${PORT}`);
+});

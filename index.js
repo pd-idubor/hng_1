@@ -1,13 +1,12 @@
 const express = require('express');
 const crypto = require('crypto');
-const bodyParser = require('body-parser');
 
 
 const app = express();
 const PORT = 3000;
 const str_data = {};
 
-app.use(bodyParser.json());
+app.use(express.json());
 
 // Create/Analyze String
 app.post('/strings', (req, res) => {
@@ -19,12 +18,12 @@ app.post('/strings', (req, res) => {
   if (typeof str !== 'string') {
     return res.status(422).json({ error: 'Invalid data type for "value" (must be a string)' });
   }
-  if (str_data.includes(str)) {
+  if (str in str_data) {
     return res.status(409).json({ error: 'String already exists in the system' });
   }
   
   
-  const sha256_hash = crypto.createHash('sha256').update(string).digest('hex');
+  const sha256_hash = crypto.createHash('sha256').update(str).digest('hex');
   function isPalindrome(str) {
     const cleanedStr = str.replace(/[\W_]/g, '').toLowerCase();
     const reversedStr = cleanedStr.split('').reverse().join('');
@@ -122,7 +121,7 @@ app.get('/strings', (req, res) => {
   res.status(200).json({
     'data': [...results],
     'count': results.length,
-    'filters_applied': JSON.parse(JSON.stringify(req.query)),
+    'filters_applied': req.query,
   });
 });
 

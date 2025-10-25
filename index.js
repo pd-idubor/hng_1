@@ -122,12 +122,13 @@ app.get('/strings', (req, res) => {
   res.status(200).json({
     'data': [...results],
     'count': results.length,
-    'filters_applied': req.query,
+    'filters_applied': JSON.parse(JSON.stringify(req.query)),
   });
 });
 
 // Natural Language Filering
 app.get('/strings/filter-by-natural-language', (req, res) => {
+  
   const { query } = req.query;
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ error: 'Unable to parse natural language query' });
@@ -135,50 +136,115 @@ app.get('/strings/filter-by-natural-language', (req, res) => {
   if (Object.keys(str_data).length === 0) {
     return res.status(404).json({ error: 'No strings available in the system' });
   }
-  if (!['palindrome', 'not palindrome', 'at least', 'minimum', 'at most', 'maximum', 'word count of', 'contains'].some(term => query.toLowerCase().includes(term))) {
+  /* if (!['palindrome', 'not palindrome', 'at least', 'minimum', 'at most', 'maximum', 'word count of', 'contains'].some(term => query.toLowerCase().includes(term))) {
     return res.status(400).json({ error: 'Unable to parse natural language query' });
-  }
+  } */
   if (Object.keys(req.query).length > 1) {
     return res.status(400).json({ error: 'Query parsed but resulted in conflicting filters' });
   }
   
-  
-  let results = Object.values(str_data);
-  const lowerQuery = query.toLowerCase();
+  let allStrings = Object.values(str_data);
 
-  if (lowerQuery.includes('palindrome')) {
-    const isPalindrome = lowerQuery.includes('not') ? false : true;
-    results = results.filter(item => item.properties.is_palindrome === isPalindrome);
+  function parseQuery(query) {
+
+    const filters = {};
+    const lowerQuery = str_query.toLowerCase();
+    
+    if (lowerQuery.includes('palindrom')) {
+    const is_palindrome = lowerQuery.includes('not') ? false : true;
+    filters.isPalindrome = is_palindrome;
+    // results = results.filter(item => item.properties.is_palindrome === isPalindrome);
+    }
+    
+    if (lowerQuery.includes("single word")) {
+      filters.word_count = 1;
+    }
+    
+
+  // const lengthMatch = lowerQuery.match(/(at least|minimum of|minimum)\s+(\d+)| (at most|maximum of|maximum)\s+(\d+)/g);
+  // if (lengthMatch) {
+  //   lengthMatch.forEach(match => {
+  //     const parts = match.trim().split(/\s+/);
+  //     const value = parseInt(parts[parts.length - 1], 10);
+  //     if (parts[0] === 'at' && parts[1] === 'least' || parts[0] === 'minimum' || parts[0] === 'minimum of') {
+  //       results = results.filter(item => item.properties.length >= value);
+  //     } else if (parts[0] === 'at' && parts[1] === 'most' || parts[0] === 'maximum' || parts[0] === 'maximum of') {
+  //       results = results.filter(item => item.properties.length <= value);
+  //     }
+  //   });
+  // }
+    const lengthMatch = lowerQuery.match(/longer than (\d+) characters/);
+    if (lengthMatch && lengthMatch[1]) {
+      filters.min_length = parseInt(lengthMatch[1]) + 1;
+    }
+    const lengthMatch2 = lowerQuery.match(/shorter than (\d+) characters/);
+    if (lengthMatch2 && lengthMatch2[1]) {
+      filters.max_length = parseInt(lengthMatch2[1]) - 1;
+    }
+    
+
+    const containsCharMatch = lowerQuery.match(/containing the letter (\w)/);
+    if (containsCharMatch) {
+      filters.contains_character = containsCharMatch[1];
+    }
+
+    const wordCountMatch = lowerQuery.match(/word count of (\d+)/);
+    if (wordCountMatch) {
+      filters.word_count = parseInt(wordCountMatch[1], 10);
+      // results = results.filter(item => item.properties.word_count === wCount);
+   }
+    /*const containsMatch = lowerQuery.match(/contains ['"](.+?)['"]/);
+    if (containsMatch) {
+      const chars = containsMatch[1].split('');
+      results = results.filter(item => 
+        chars.every(char => item.value.includes(char))
+      );
+    }*/
+   match = lowerQuery.match(/containing (?:the letter |')([a-z0-9])(?:'|)/);
+    if (match && match[1]) {
+        filters.contains_character = match[1];
+    }
+
+    // "first vowel"
+    if (lowerQuery.includes("first vowel")) {
+        filters.contains_character = "a";
+    }
+    return filters;
   }
-  const lengthMatch = lowerQuery.match(/(at least|minimum of|minimum)\s+(\d+)| (at most|maximum of|maximum)\s+(\d+)/g);
-  if (lengthMatch) {
-    lengthMatch.forEach(match => {
-      const parts = match.trim().split(/\s+/);
-      const value = parseInt(parts[parts.length - 1], 10);
-      if (parts[0] === 'at' && parts[1] === 'least' || parts[0] === 'minimum' || parts[0] === 'minimum of') {
-        results = results.filter(item => item.properties.length >= value);
-      } else if (parts[0] === 'at' && parts[1] === 'most' || parts[0] === 'maximum' || parts[0] === 'maximum of') {
-        results = results.filter(item => item.properties.length <= value);
-      }
-    });
+
+  function applyFilters(allStrings, filters) {
+    let filteredList = [...allStrings];
+
+    if (filters.isPalindrome) {
+      filteredList = filteredList.filter(isPalindrome);
+    }
+    if (filters.min_length) {
+      filteredList = filteredList.filter(item => item.properties.length >= filters.min_length);
+    }
+    if (filters.max_length) {
+      filteredList = filteredList.filter(item => item.properties.length <= filters.max_length);
+    }
+    if (filters.word_count) {
+      filteredList = filteredList.filter(item => item.properties.word_count === filters.word_count);
+    }
+    if (filters.contains_character) {
+      const char = filters.contains_charactertoLowerCase();
+      filteredList = filteredList.filter(item => item.value.toLowerCase.includes(char));
+    }
+
+    return filteredList;
   }
-  const wordCountMatch = lowerQuery.match(/word count of (\d+)/);
-  if (wordCountMatch) {
-    const wCount = parseInt(wordCountMatch[1], 10);
-    results = results.filter(item => item.properties.word_count === wCount);
-  }
-  const containsMatch = lowerQuery.match(/contains ['"](.+?)['"]/);
-  if (containsMatch) {
-    const chars = containsMatch[1].split('');
-    results = results.filter(item => 
-      chars.every(char => item.value.includes(char))
-    );
-  }
+
+  const filters = parseQuery(query);
+  const results = applyFilters(allStrings, filters);
 
   res.status(200).json({
     'data': [...results],
     'count': results.length,
-    'natural_language_query': query,
+    'interpreted_query': {
+      'original': query,
+      'parsed_filters': parseQuery(query),
+    }
   });
 });
 

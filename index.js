@@ -77,17 +77,18 @@ app.get('/strings/:value', (req, res) => {
   res.status(200).json(response);
   });
 
+app.get('/strings/another', (req, res) => {
+  console.log("Anoyhet");
+});
+
 // Get All Strings with Filtering
 app.get('/strings', (req, res) => {
+  
   if (Object.keys(str_data).length === 0) {
+    console.log("Error");
     return res.status(404).json({ error: 'No strings available in the system' });
   }
-  if (Object.keys(req.query).length === 0) {
-    return res.status(200).json({
-      'data': Object.values(str_data),
-      'count': Object.keys(str_data).length,
-    });
-  }
+  
   if (!['is_palindrome', 'min_length', 'max_length', 'word_count', 'contains_characters'].some(param => param in req.query)) {
     return res.status(400).json({ error: 'Invalid query parameter values or types' });
   }
@@ -95,23 +96,24 @@ app.get('/strings', (req, res) => {
 
   // Filtering based on query parameters
   const { is_palindrome,  min_length, max_length, word_count, contains_characters } = req.query;
-  if (is_palindrome !== undefined) {
+  
+  if (is_palindrome) {
     const isPalindrome = is_palindrome.toLowerCase() === 'true';
     results = results.filter(item => item.properties.is_palindrome === isPalindrome);
   }
-  if (min_length !== undefined) {
+  if (min_length) {
     const minLen = parseInt(min_length, 10);
     results = results.filter(item => item.properties.length >= minLen);
   }
-  if (max_length !== undefined) {
+  if (max_length) {
     const maxLen = parseInt(max_length, 10);
     results = results.filter(item => item.properties.length <= maxLen);
   }
-  if (word_count !== undefined) {
+  if (word_count) {
     const wCount = parseInt(word_count, 10);
     results = results.filter(item => item.properties.word_count === wCount);
   }
-  if (contains_characters !== undefined) {
+  if (contains_characters) {
     const chars = contains_characters.split('');
     results = results.filter(item => 
       chars.every(char => item.value.includes(char))
@@ -126,18 +128,25 @@ app.get('/strings', (req, res) => {
 });
 
 // Natural Language Filering
-app.get('/strings/filter-by-natural-language', (req, res) => {
-  
+app.get('strings/filter-by-sth', (req, res) => {
+  console.log("The somehing pary");
+});
+
+app.get('/string/filter-by-natural-language', (req, res) => {
+  console.log("Filter by natuealnlanguage");
+  conwole.log(skemthjng);
+
   const { query } = req.query;
+  console.log({"query": query});
+  
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ error: 'Unable to parse natural language query' });
   }
   if (Object.keys(str_data).length === 0) {
+    console.log("Theres been an errir");
     return res.status(404).json({ error: 'No strings available in the system' });
   }
-  /* if (!['palindrome', 'not palindrome', 'at least', 'minimum', 'at most', 'maximum', 'word count of', 'contains'].some(term => query.toLowerCase().includes(term))) {
-    return res.status(400).json({ error: 'Unable to parse natural language query' });
-  } */
+  
   if (Object.keys(req.query).length > 1) {
     return res.status(400).json({ error: 'Query parsed but resulted in conflicting filters' });
   }
@@ -145,33 +154,20 @@ app.get('/strings/filter-by-natural-language', (req, res) => {
   let allStrings = Object.values(str_data);
 
   function parseQuery(query) {
+    console.log("All strings filter called");
 
     const filters = {};
     const lowerQuery = str_query.toLowerCase();
     
-    if (lowerQuery.includes('palindrom')) {
+    if (lowerQuery.includes('palindromic')) {
     const is_palindrome = lowerQuery.includes('not') ? false : true;
     filters.isPalindrome = is_palindrome;
-    // results = results.filter(item => item.properties.is_palindrome === isPalindrome);
     }
     
     if (lowerQuery.includes("single word")) {
       filters.word_count = 1;
     }
-    
 
-  // const lengthMatch = lowerQuery.match(/(at least|minimum of|minimum)\s+(\d+)| (at most|maximum of|maximum)\s+(\d+)/g);
-  // if (lengthMatch) {
-  //   lengthMatch.forEach(match => {
-  //     const parts = match.trim().split(/\s+/);
-  //     const value = parseInt(parts[parts.length - 1], 10);
-  //     if (parts[0] === 'at' && parts[1] === 'least' || parts[0] === 'minimum' || parts[0] === 'minimum of') {
-  //       results = results.filter(item => item.properties.length >= value);
-  //     } else if (parts[0] === 'at' && parts[1] === 'most' || parts[0] === 'maximum' || parts[0] === 'maximum of') {
-  //       results = results.filter(item => item.properties.length <= value);
-  //     }
-  //   });
-  // }
     const lengthMatch = lowerQuery.match(/longer than (\d+) characters/);
     if (lengthMatch && lengthMatch[1]) {
       filters.min_length = parseInt(lengthMatch[1]) + 1;
@@ -190,21 +186,12 @@ app.get('/strings/filter-by-natural-language', (req, res) => {
     const wordCountMatch = lowerQuery.match(/word count of (\d+)/);
     if (wordCountMatch) {
       filters.word_count = parseInt(wordCountMatch[1], 10);
-      // results = results.filter(item => item.properties.word_count === wCount);
-   }
-    /*const containsMatch = lowerQuery.match(/contains ['"](.+?)['"]/);
-    if (containsMatch) {
-      const chars = containsMatch[1].split('');
-      results = results.filter(item => 
-        chars.every(char => item.value.includes(char))
-      );
-    }*/
-   match = lowerQuery.match(/containing (?:the letter |')([a-z0-9])(?:'|)/);
+      match = lowerQuery.match(/containing (?:the letter |')([a-z0-9])(?:'|)/);
+    }
     if (match && match[1]) {
         filters.contains_character = match[1];
     }
 
-    // "first vowel"
     if (lowerQuery.includes("first vowel")) {
         filters.contains_character = "a";
     }
@@ -212,6 +199,7 @@ app.get('/strings/filter-by-natural-language', (req, res) => {
   }
 
   function applyFilters(allStrings, filters) {
+    console.log("Apply filters called");
     let filteredList = [...allStrings];
 
     if (filters.isPalindrome) {
@@ -245,6 +233,10 @@ app.get('/strings/filter-by-natural-language', (req, res) => {
       'parsed_filters': parseQuery(query),
     }
   });
+});
+
+app.get('/strings/another', (req, res) => {
+  console.log("Anoyhet");
 });
 
 // Delete String
